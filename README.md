@@ -32,6 +32,13 @@ python3 -m pip install fastapi uvicorn requests python-dotenv
 * `os` - Provides functions to access environment variables, such as your API key
 * `secrets` - Provides secure functions for comparing secret values
 * `dotenv` - Imports the function that loads variables from your .env file
+* `Client ID`: Identifies the application requesting access.
+* `Client secret`: A confidential credential used to authenticate the client.
+* `Access token`: A temporary credential used to access a protected endpoint.
+* `JWT`: A signed token containing claims such as the subject (sub) and expiration (exp).
+* `Bearer token`: A token presented in the Authorization header.
+* `HS256`: The signing algorithm used for the JWT.
+* `Token expiry`: The demo token expires after 30 minutes.
 
 
 
@@ -170,5 +177,152 @@ This function provides a database session to an API endpoint.
 ### We also queried it directly using Python's built-in SQLite library:
 python3 -c "import sqlite3; c=sqlite3.connect('tickets.db'); print(c.execute('SELECT * FROM tickets').fetchall()); c.close()"
 
+### 14. OAuth2 Client Credentials Flow
+Implemented a simplified OAuth2 client-credentials-style flow for service-to-service authentication.
+Token generation
+The client sends a form-encoded POST request to /token containing:
+grant_type=client_credentials
+client_id
+client_secret
+The server validates the credentials and generates a signed JWT access token.
+Access token usage
+The client sends the token when requesting protected data:
+headers = {
+    "Authorization": f"Bearer {access_token}"
+}
+The server decodes and validates the token, checks its subject, and verifies its expiry before returning ticket data.
+
+### 15. Python API Client — client.py
+The client communicates with the FastAPI server using the requests library.
+Client workflow
+Loads configuration and credentials from .env.
+Sends a POST request to /token.
+Extracts the JWT access token from the response.
+Sends an authenticated GET request to /oauth/tickets.
+Receives ticket records in JSON format.
+Sends the ticket data to the webhook receiver.
+Saves execution details to output.json.
+
+### 16. Webhook Integration
+Implemented a webhook receiver using Python's built-in http.server module.
+The client sends ticket data to the receiver running on port 9000.
+How it works
+The client sends a POST request containing JSON ticket data.
+The receiver's do_POST() method handles the request.
+Content-Length determines how many bytes to read from the request body.
+json.loads() parses the incoming JSON.
+The receiver returns an HTTP success response.
+Key concepts
+Webhook: A mechanism for sending data to another service when an event or action occurs.
+HTTP POST: Sends data to the receiving service.
+Request body: Contains the ticket payload.
+Webhook receiver: An HTTP server that accepts and processes incoming requests.
+JSON serialization: Converts Python data into a format suitable for transmission.
+
+### 17. Error Handling, Timeouts and Retries
+Added error handling to make client requests more resilient.
+requests.exceptions.Timeout handles requests that take too long.
+requests.exceptions.HTTPError handles unsuccessful HTTP responses after raise_for_status().
+requests.exceptions.RequestException handles other request-related errors.
+timeout=10 prevents the client from waiting indefinitely.
+HTTPAdapter and Retry configure retries for selected transient server errors.
+The retry strategy allows up to three retries for GET requests receiving status codes 500, 502, 503, or 504, with a backoff delay between attempts.
+Retries are restricted to GET requests to avoid accidentally repeating operations that create or modify data.
+
+### 18. Execution Logging — output.json
+After a successful integration run, the client writes execution details to output.json.
+Example:
+{
+    "timestamp": "2026-10-12T22:28:26.613799",
+    "status": "success",
+    "tickets_sent": 3
+}
+timestamp records when the execution was logged.
+status records the outcome.
+tickets_sent records the number of tickets included in the payload.
+The log supports basic execution tracking and troubleshooting. It is overwritten on each successful run rather than maintaining a history.
+
+### 19. Environment Variables and Secret Management
+Credentials and configuration are stored in a local .env file and loaded using python-dotenv.
+Example variable names:
+API_KEY=your_api_key
+CLIENT_ID=your_client_id
+CLIENT_SECRET=your_client_secret
+JWT_SECRET=your_long_random_secret
+These are placeholders; use your actual local values in .env.
+The .gitignore file excludes .env, the virtual environment, Python cache files, and other local artifacts.
+Never commit real API keys, client secrets, or JWT signing secrets to GitHub.
+
+
+### 20. Project Architecture
+Python Client (client.py)
+        |
+        | 1. Request access token
+        v
+FastAPI Server (server3.py)
+        |
+        | 2. Validate client credentials
+        | 3. Generate JWT
+        v
+Python Client
+        |
+        | 4. GET /oauth/tickets
+        |    Authorization: Bearer <token>
+        v
+FastAPI Server
+        |
+        | 5. Validate JWT
+        | 6. Query database
+        v
+SQLite Database (tickets.db)
+        |
+        | 7. Return ticket data as JSON
+        v
+Python Client
+        |
+        | 8. POST ticket data
+        v
+Webhook Receiver (webhook_receiver.py)
+        |
+        | 9. Return success response
+        v
+Execution Log (output.json)
+The project demonstrates API development, database access, authentication, service-to-service communication, webhook handling, and basic operational logging.
+
+### 21. How to Run the Project
+Prerequisites
+Python installed
+Project dependencies installed
+.env configured with the required credentials
+Terminal 1 — Start the FastAPI server
+source venv/bin/activate
+python server3.py
+Terminal 2 — Start the webhook receiver
+source venv/bin/activate
+python webhook_receiver.py
+Terminal 3 — Run the client
+source venv/bin/activate
+python client.py
+Expected output
+Access token received!
+Tickets fetched successfully: ...
+Tickets sent to webhook successfully!
+Results saved to output.json
+Swagger UI is available at:
+http://127.0.0.1:8000/docs
+
+### Skills Demonstrated
+Python programming and virtual environments
+REST API development with FastAPI
+HTTP requests and JSON data exchange
+Pydantic request validation
+SQLAlchemy ORM and SQLite
+CRUD operations and database sessions
+API-key authentication
+JWT access tokens and OAuth2 concepts
+Webhook implementation and integration
+Error handling, timeouts, and retries
+Environment variables and secret management
+Git and GitHub version control
 
 
